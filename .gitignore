@@ -1,0 +1,20 @@
+.DS_Store
+*.log
+.triage-cache/
+.oss-harvest-state.json
+logs/
+__pycache__/
+*.pyc
+.venv/
+.env
+.idea
+.devon-index-dirty
+
+# Generated rollback scripts for one-off migrations that have already run.
+# They contain absolute paths from the machine that produced them, and the
+# archive has been rewritten since, so they cannot be safely replayed.
+*-undo*.sh
+.devon-index-dirty
+.oss-harvest-state.json
+logs/
+migrate-to-claude-cli.sh
