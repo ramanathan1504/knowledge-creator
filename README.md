@@ -196,6 +196,33 @@ Type **`save devon`** to Claude Code. It writes a structured note into
 Problem, The "Why", The Solution — appending to an existing note on the same
 subject rather than creating a near-duplicate.
 
+### Filing a PR review
+
+A review write-up is the one thing the harvesters cannot produce. `oss-harvest.py`
+collects what was said *publicly* on a thread; a review is the reasoning that got
+there, including the parts deliberately never posted. Write the draft anywhere,
+then file it:
+
+```bash
+./pr-review-file.py ~/drafts/pr-4217.md            # dry run, like everything here
+./pr-review-file.py ~/drafts/pr-4217.md --apply
+./pr-review-file.py ~/drafts/*.md --apply          # or a batch
+./pr-review-file.py notes.md --pr 4217 --repo jreleaser/jreleaser --apply
+```
+
+It reads the PR through `gh` for the title, state, diffstat and the issue it
+closes, mines the review prose for identifiers to tag with, cross-links the
+sibling reviews, and maintains `00-INDEX.md` in that folder. The PR number is
+taken from the filename when it looks like `pr-4217.md`.
+
+It **copies**, so delete your draft once you are happy. Re-filing an edited
+review overwrites the note it wrote before and keeps that note's date prefix, so
+you never end up with two dated copies of the same review.
+
+The one folder it will not write to is `Projects/oss-github/00-INDEX.md` — that
+is regenerated wholesale by the harvester every morning, so anything put there is
+gone within a day.
+
 ---
 
 ## 3. The scripts
@@ -212,6 +239,7 @@ subject rather than creating a near-duplicate.
 | `topic-refile.py` | one-off: inverted `Projects/` from source-first to topic-first |
 | `blog-gen.py` | finished OSS work → publishable drafts, scored and ranked |
 | `pick-for-me.py` | personalised backlog ranking |
+| `pr-review-file.py` | a hand-written PR review → `Projects/<topic>/pr-reviews/`, header derived from the PR |
 | `triage.sh` | repo backlog triage → self-contained HTML |
 | `log4j-pr-review.sh` | PR review harness: feedback, diff, build, tests, spotless, pollution check |
 | `devon-clean-existing.py` | one-off: tidied the original capture folder |
@@ -236,6 +264,27 @@ Every script is **dry-run by default**. `--apply` commits.
 ---
 
 ## 4. Things that will bite you
+
+**Moving or renaming this checkout breaks the scheduled job, quietly.** The
+launchd plist holds an absolute path to `oss-harvest-daily.sh`. Move the checkout
+and the job still shows `loaded: yes` every morning while running nothing at all.
+
+```bash
+./oss-harvest-daily.sh --status      # loaded? when did it last actually run?
+./oss-harvest-daily.sh --install     # rewrites the plist from wherever the script now is
+```
+
+**`loaded: yes` with no `last run:` line is the signature of that failure** — the
+job is registered but its state file is somewhere else, or was never written. The
+fix is always `--install`; nothing else needs touching, because every script
+derives its own directory rather than assuming one.
+
+This is also why nothing here may hardcode a path into `~`. That mistake was made
+once: `oss-harvest.py` kept its watermark at a fixed location while `--status`
+read the script's own directory. The two agreed only for as long as the checkout
+happened to sit at that path — and when it moved, the harvester silently
+*recreated* the old directory to hold state belonging to a checkout that lived
+somewhere else entirely. Use `kbpaths.SCRIPTS`.
 
 **The claude.ai export is a snapshot.** It covers up to the date it was
 generated and no further. For anything newer: claude.ai > Settings > Privacy >
