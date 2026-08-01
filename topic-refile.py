@@ -36,7 +36,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 HOME = Path.home()
-from kbpaths import ARCHIVE as DEVON
+from kbpaths import ARCHIVE as DEVON, SCRIPTS
 PROJ = DEVON / "Projects"
 APPLY = "--apply" in sys.argv
 
@@ -45,7 +45,7 @@ def next_undo() -> Path:
     """One undo script per apply, numbered. A file moved by pass 1 and again by
     pass 2 can only be put back by running the passes in reverse, so these must
     never share a filename — run the HIGHEST number first."""
-    d = HOME / "claude-cli"
+    d = SCRIPTS
     n = 1
     while (d / f"topic-refile-undo-{n}.sh").exists():
         n += 1

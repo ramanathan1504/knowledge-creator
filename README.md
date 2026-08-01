@@ -5,7 +5,11 @@ I've worked on, indexed by DEVONthink and updated daily without intervention.
 
 - **Archive** (indexed by DEVONthink): `~/Library/Mobile Documents/com~apple~CloudDocs/Documents/Devon Capture/`
 - **Database**: `~/Documents/Knowledge.dtBase2`
-- **Scripts and scratch** (this folder): `~/claude-cli/`
+- **Scripts and scratch** (this folder): the `knowledge-creator` checkout,
+  wherever you cloned it. Nothing assumes a fixed path — every script resolves
+  its own directory, and `oss-harvest-daily.sh --install` writes the scheduled
+  job from that, so moving the checkout and re-running `--install` is the entire
+  migration.
 
 Current size: **512 markdown files, 957 files, 220 MB, 956 indexed records.**
 
@@ -85,7 +89,7 @@ oss-harvest-daily.sh               # run it now
 oss-harvest-daily.sh --uninstall   # stop it
 ```
 
-Logs in `~/claude-cli/logs/`, auto-truncated at 2 MB.
+Logs in `logs/` inside the checkout, auto-truncated at 2 MB.
 
 ### Finding things
 

@@ -4,7 +4,7 @@
 
 This describes two programs that work together. You can run either one alone.
 
-- **claude-cli** (this repo, Python) — the **archive**. Harvests everything you
+- **knowledge-creator** (this repo, Python) — the **archive**. Harvests everything you
   have worked on into plain Markdown, redacts secrets on the way in, and builds
   derived indexes. Uses no AI at all.
 - **self-analyse** (Java) — the **workbench**. Reads that Markdown, embeds it,

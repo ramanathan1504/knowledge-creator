@@ -1,4 +1,4 @@
-# DEVELOPING.md — claude-cli internals
+# DEVELOPING.md — knowledge-creator internals
 
 **Audience:** anyone changing the harvesters. For running the system, see
 [`SETUP.md`](SETUP.md).

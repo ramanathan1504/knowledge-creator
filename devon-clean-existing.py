@@ -39,7 +39,7 @@ from datetime import date
 from pathlib import Path
 
 HOME = Path.home()
-from kbpaths import ARCHIVE as DEVON
+from kbpaths import ARCHIVE as DEVON, SCRIPTS
 QUAR = DEVON / "_Quarantine"
 TODAY = date.today().isoformat()
 APPLY = "--apply" in sys.argv
@@ -276,7 +276,7 @@ def main():
         "original\tnew\taction\n" + "\n".join("\t".join(r) for r in manifest) + "\n",
         encoding="utf-8")
 
-    undo_path = HOME / "claude-cli" / "devon-clean-existing-undo.sh"
+    undo_path = SCRIPTS / "devon-clean-existing-undo.sh"
     undo_path.write_text(
         "#!/usr/bin/env bash\n# Reverses devon-clean-existing.py\n"
         "set -euo pipefail\n" + "\n".join(reversed(undo)) + "\n", encoding="utf-8")

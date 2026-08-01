@@ -30,8 +30,9 @@ inside a `<source>/` subfolder belongs to a harvester and is rewritten.
 The source level is not decoration. It tells you what kind of evidence you are
 looking at, which you must say when you answer.
 
-Database: `~/Documents/Knowledge.dtBase2`. Scripts: `~/claude-cli/`.
-Operating manual: `~/claude-cli/README.md` — read it before diagnosing anything.
+Database: `~/Documents/Knowledge.dtBase2`. Scripts: the `knowledge-creator`
+checkout — locate it rather than assuming a path, it has moved once already.
+Its `README.md` is the operating manual; read it before diagnosing anything.
 
 # Answering "do I know about X?"
 
@@ -99,14 +100,24 @@ Prefer primary notes over derived ones as evidence. `Reference/snippets/*.md`,
 
 # Maintenance
 
+Every script derives its own directory, so it runs correctly from wherever the
+checkout sits. Find it rather than hardcoding a path:
+
 ```bash
-~/claude-cli/oss-harvest-daily.sh --status     # is the daily job healthy?
-~/claude-cli/oss-harvest.py --probe            # size a GitHub run, write nothing
-~/claude-cli/knowledge-map.py                  # dry-run the index layer
-~/claude-cli/topic-digest.py                   # dry-run the digests
-~/claude-cli/blog-gen.py --list                # rank publishable work
-~/claude-cli/pick-for-me.py OWNER/REPO         # what to work on next
+KC=$(dirname "$(readlink ~/.local/bin/log4j-pr-review)")
+
+"$KC"/oss-harvest-daily.sh --status     # is the daily job healthy?
+"$KC"/oss-harvest.py --probe            # size a GitHub run, write nothing
+"$KC"/knowledge-map.py                  # dry-run the index layer
+"$KC"/topic-digest.py                   # dry-run the digests
+"$KC"/blog-gen.py --list                # rank publishable work
+"$KC"/pick-for-me.py OWNER/REPO         # what to work on next
 ```
+
+`--status` reads `.oss-harvest-state.json` from the checkout. A job reported as
+loaded but with no last run means the scheduled plist and the checkout have
+drifted apart — re-run `oss-harvest-daily.sh --install`, which regenerates the
+plist from the script's own location.
 
 Every script is dry-run by default; `--apply` commits. Run the dry run and show
 the user before applying anything.
