@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # These scripts run unattended from a scheduled job against a real archive,
+      # and several can move or delete files. A syntax error therefore surfaces
+      # at 3am against live data rather than here.
+      - name: Compile every script
+        run: python3 -m compileall -q .
+
+      - name: Check the shell scripts parse
+        run: |
+          fail=0
+          for f in *.sh; do
+            [ -e "$f" ] || continue
+            bash -n "$f" || { echo "::error file=$f::$f does not parse"; fail=1; }
+          done
+          exit $fail
+
+      # The guards that keep generated notes out of the knowledge base. Both
+      # scripts already skip their own output; the exclusion is one regex, and a
+      # well-meant edit widening or narrowing it fails silently -- coverage
+      # simply reports a different number, with nothing to say it is wrong.
+      - name: Generated notes must stay out of the corpus
+        run: |
+          python3 - <<'PY'
+          import re, sys
+
+          def load(path):
+              src = open(path).read()
+              for chunk in src.split('\n\n'):
+                  if 'SELF_OUTPUT = re.compile' in chunk:
+                      ns = {'re': re}
+                      exec(chunk, ns)
+                      return ns['SELF_OUTPUT']
+              print(f'::error file={path}::SELF_OUTPUT not found')
+              sys.exit(1)
+
+          cov  = load('coverage-gap.py')
+          kmap = load('knowledge-map.py')
+
+          # skipped: assembled from the corpus, so counting them lets the base
+          #          certify itself.
+          # counted: written by a person; the strongest evidence in the archive.
+          cases = [
+              ('Projects/log4j/oss-cli/Issue-2073-resolution-20260802.md', True),
+              ('Projects/log4j/oss-cli/Issue-4234-review-20260802.md',     True),
+              ('Reference/topics/log4j.md',                                True),
+              ('Reference/snippets/java.md',                               True),
+              ('Projects/log4j/pr-reviews/20260731-log4j-pr4217-zstd.md',  False),
+              ('Projects/log4j/claude-web/some-reasoning.md',              False),
+              ('Projects/log4j/oss-github/thread-4217.md',                 False),
+              ('Personal/ai-studio/note.md',                               False),
+          ]
+
+          fail = False
+          for path, want_skipped in cases:
+              for label, rx in (('coverage-gap', cov), ('knowledge-map', kmap)):
+                  skipped = bool(rx.search(path))
+                  if skipped != want_skipped:
+                      verb = 'must be skipped' if want_skipped else 'must be counted'
+                      print(f'::error::{label}: {path} {verb}')
+                      fail = True
+
+          print('exclusions FAILED' if fail else 'exclusions correct')
+          sys.exit(1 if fail else 0)
+          PY
