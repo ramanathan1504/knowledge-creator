@@ -45,9 +45,17 @@ SCAN = ["Projects", "Reference", "Tooling", "Compliance"]
 # Derived files are assembled FROM the notes. Counting them as coverage would
 # let the base certify itself: the log4j digest mentions every log4j subtopic,
 # so every gap would close the moment topic-digest.py ran.
+#
+# The same hazard arrives from outside Reference/. oss-cli answers a question by
+# retrieving dozens of passages from this archive and writing the answer back as
+# a note, so its output is derived in exactly this sense while living under
+# Projects/. Re-asking a question would otherwise raise the score for knowing
+# it. Only oss-cli's own folder is skipped, never <topic>/pr-reviews/, which
+# holds reviews written by hand and is the strongest evidence here.
 SELF_OUTPUT = re.compile(
     r"^Reference/snippets/|^Reference/topics/|^Reference/gaps/|"
-    r"^Reference/00-knowledge-map\.md$|^Reference/mindmap\.md$")
+    r"^Reference/00-knowledge-map\.md$|^Reference/mindmap\.md$|"
+    r"^Projects/[^/]+/oss-cli/")
 
 # A note "covers" a section only at this many mentions. One passing use of the
 # word "lookup" is not knowledge of Lookups; the same floor knowledge-map.py

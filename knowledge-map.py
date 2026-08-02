@@ -121,9 +121,16 @@ MAX_PER_TOPIC = 250          # keep the snippet files openable
 # — so it was reading its OWN output as source material. A leaked credential in
 # a snippet library got copied forward into the regenerated library every time,
 # meaning redacting the true source did nothing. Skip anything we produce.
+#
+# Machine-generated notes arriving from outside Reference/ carry the same fault.
+# oss-cli composes its notes out of passages retrieved from this archive, so
+# reading them back in re-ingests the base through a paraphrase — and carries
+# forward whatever the paraphrase preserved, which is how the credential above
+# survived redaction of its source.
 SELF_OUTPUT = re.compile(
     r"^Reference/snippets/|^Reference/00-knowledge-map\.md$|^Reference/mindmap\.md$"
-    r"|^Reference/topics/")          # topic-digest.py output — derived, not source
+    r"|^Reference/topics/"           # topic-digest.py output — derived, not source
+    r"|^Projects/[^/]+/oss-cli/")    # oss-cli output — derived from this archive
 
 
 def docs():
