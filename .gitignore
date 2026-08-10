@@ -18,3 +18,9 @@ __pycache__/
 .oss-harvest-state.json
 logs/
 migrate-to-claude-cli.sh
+
+# Triage reports. triage.sh regenerates these, and bench hub now re-sweeps any
+# report older than a day, so committing them means a new file every morning.
+# They are read from disk by name, never by git, and a stale one is worthless —
+# the sweep that produced it is the artefact, not the HTML.
+triage-*.html
