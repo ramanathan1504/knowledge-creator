@@ -15,16 +15,35 @@ Current size: **512 markdown files, 957 files, 220 MB, 956 indexed records.**
 
 ---
 
+## 0. Where this sits, of the three
+
+**oss-cli knows → log4j2-workout runs → this repo remembers.**
+
+| Repo | Owns | Reach for it when |
+|---|---|---|
+| `oss-cli` | facts about any repo from the GitHub API, cached by head SHA — no clone, any language | you want PR facts, conventions or a verdict without building anything |
+| `log4j2-workout` | execution — real apps, real JVMs, the version × config × app matrix, `bench review <n>` | the question needs something to actually run |
+| **this one** | the archive: harvest, file, index, retrieve | you want it findable in a year |
+
+One test decides where new work belongs: *does it need to execute code against a
+real app?* Then it is `log4j2-workout`. Does it only need to be retrievable
+later? Then it is here. Neither? `oss-cli`.
+
+`log4j-pr-review.sh` used to live here and no longer does — it needed a clone
+and ran Maven, so it belonged with the executor. It is `bench review <n>` now,
+with red/green gates it never had. What stayed is `pr-review-file.py`, because
+filing and indexing is this repo's job: `bench review <n> --file` calls it.
+
 ## 1. What it holds
 
-| area | files | source |
-|---|---:|---|
-| `Projects/` | 415 | GitHub threads, AI Studio and Claude conversations, hand-written notes |
-| `Reference/` | 55 | Java curriculum, syntax notes, snippet libraries, coverage map, topic digests |
-| `Personal/` | 33 | career, life, anything non-technical — kept out of technical search |
-| `Compliance/` | 11 | SOC 2 policies and audit material |
-| `Tooling/` | 4 | how the tools themselves work |
-| `_assets/` | 439 | screenshots and raw attachments from AI Studio |
+| area          | files | source                                                                        |
+|---------------|------:|-------------------------------------------------------------------------------|
+| `Projects/`   |   415 | GitHub threads, AI Studio and Claude conversations, hand-written notes        |
+| `Reference/`  |    55 | Java curriculum, syntax notes, snippet libraries, coverage map, topic digests |
+| `Personal/`   |    33 | career, life, anything non-technical — kept out of technical search           |
+| `Compliance/` |    11 | SOC 2 policies and audit material                                             |
+| `Tooling/`    |     4 | how the tools themselves work                                                 |
+| `_assets/`    |   439 | screenshots and raw attachments from AI Studio                                |
 
 ### Filing is topic first, provenance second
 
@@ -132,11 +151,11 @@ coverage-gap.py                    # scorecard for all three
 coverage-gap.py --apply log4j      # write Reference/gaps/log4j.md
 ```
 
-| yardstick | source |
-|---|---|
-| `log4j` | [Log4j 2.x manual](https://logging.apache.org/log4j/2.x/manual/) — 47 areas |
-| `spring-boot` | [Spring Boot reference](https://docs.spring.io/spring-boot/) — 47 areas |
-| `java` | [dev.java tutorials](https://dev.java/learn/) — 35 areas |
+| yardstick     | source                                                                      |
+|---------------|-----------------------------------------------------------------------------|
+| `log4j`       | [Log4j 2.x manual](https://logging.apache.org/log4j/2.x/manual/) — 47 areas |
+| `spring-boot` | [Spring Boot reference](https://docs.spring.io/spring-boot/) — 47 areas     |
+| `java`        | [dev.java tutorials](https://dev.java/learn/) — 35 areas                    |
 
 Two grades, and the split matters. **● applied** means at least one non-bot
 GitHub thread under `<topic>/oss-github/` covers it — worked, reviewed, merged.
@@ -227,24 +246,24 @@ gone within a day.
 
 ## 3. The scripts
 
-| script | what it does |
-|---|---|
-| `oss-harvest.py` | GitHub → Markdown. `--probe` sizes a run, `--full` re-reads the window, no flag = incremental |
-| `oss-harvest-daily.sh` | the five-stage daily refresh + launchd installer |
-| `aistudio-extract.py` | Google AI Studio → Markdown, redacted, personal split out |
-| `claude-harvest.py` | claude.ai export + Claude Code sessions |
-| `knowledge-map.py` | coverage map, mind map, snippet libraries — an index over the notes |
-| `topic-digest.py` | `Reference/topics/<topic>.md` — problem → resolution, read out of the notes |
-| `coverage-gap.py` | `Reference/gaps/<tech>.md` — the base vs. the official manual, what is missing |
-| `topic-refile.py` | one-off: inverted `Projects/` from source-first to topic-first |
-| `blog-gen.py` | finished OSS work → publishable drafts, scored and ranked |
-| `pick-for-me.py` | personalised backlog ranking |
-| `pr-review-file.py` | a hand-written PR review → `Projects/<topic>/pr-reviews/`, header derived from the PR |
-| `triage.sh` | repo backlog triage → self-contained HTML |
-| `log4j-pr-review.sh` | PR review harness: feedback, diff, build, tests, spotless, pollution check |
-| `devon-clean-existing.py` | one-off: tidied the original capture folder |
-| `devon-migrate.py` | one-off: moved the Obsidian vault in |
-| `devon-index.sh` | indexes `Knowledge.dtBase2`; `--sync` refreshes it |
+| script                    | what it does                                                                                  |
+|---------------------------|-----------------------------------------------------------------------------------------------|
+| `oss-harvest.py`          | GitHub → Markdown. `--probe` sizes a run, `--full` re-reads the window, no flag = incremental |
+| `oss-harvest-daily.sh`    | the five-stage daily refresh + launchd installer                                              |
+| `aistudio-extract.py`     | Google AI Studio → Markdown, redacted, personal split out                                     |
+| `claude-harvest.py`       | claude.ai export + Claude Code sessions                                                       |
+| `knowledge-map.py`        | coverage map, mind map, snippet libraries — an index over the notes                           |
+| `topic-digest.py`         | `Reference/topics/<topic>.md` — problem → resolution, read out of the notes                   |
+| `coverage-gap.py`         | `Reference/gaps/<tech>.md` — the base vs. the official manual, what is missing                |
+| `topic-refile.py`         | one-off: inverted `Projects/` from source-first to topic-first                                |
+| `blog-gen.py`             | finished OSS work → publishable drafts, scored and ranked                                     |
+| `pick-for-me.py`          | personalised backlog ranking                                                                  |
+| `pr-review-file.py`       | a hand-written PR review → `Projects/<topic>/pr-reviews/`, header derived from the PR         |
+| `triage.sh`               | repo backlog triage → self-contained HTML                                                     |
+| ~~`log4j-pr-review.sh`~~  | **moved** — now `bench review <n>` in `log4j2-workout`, plus red/green gates                  |
+| `devon-clean-existing.py` | one-off: tidied the original capture folder                                                   |
+| `devon-migrate.py`        | one-off: moved the Obsidian vault in                                                          |
+| `devon-index.sh`          | indexes `Knowledge.dtBase2`; `--sync` refreshes it                                            |
 
 `devon-clean-existing.py`, `devon-migrate.py` and `topic-refile.py` have run
 and are one-offs. Keep them: they document how the layout came to be.

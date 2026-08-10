@@ -104,7 +104,7 @@ Every script derives its own directory, so it runs correctly from wherever the
 checkout sits. Find it rather than hardcoding a path:
 
 ```bash
-KC=$(dirname "$(readlink ~/.local/bin/log4j-pr-review)")
+KC=$(dirname "$(readlink ~/.local/bin/kb)")
 
 "$KC"/oss-harvest-daily.sh --status     # is the daily job healthy?
 "$KC"/oss-harvest.py --probe            # size a GitHub run, write nothing
