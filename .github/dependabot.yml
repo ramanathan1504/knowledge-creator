@@ -1,0 +1,29 @@
+# Dependency updates, opened as pull requests.
+#
+# This repository is Python scripts and shell, with no lockfile and no declared
+# runtime dependencies -- so the ecosystem that actually matters here is the one
+# people forget: the GitHub Actions used by CI. A stale action is how a
+# supply-chain problem arrives in a repository nobody thought had dependencies.
+#
+# The pip entry is present and harmless while there is no requirements file, and
+# starts working the day one is added, rather than being remembered then.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "deps"

@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 #
 # kb — one entry point over the archive, so OSS-CLI has something to call.
 #
@@ -24,7 +35,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 die() { printf '\033[31merror\033[0m %s\n' "$*" >&2; exit 1; }
 
-usage() { sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() {
+  # Anchored to the licence block rather than to line numbers: the header pushed
+  # the doc comment down and a fixed range printed the licence as help text.
+  sed -n '/limitations under the License\./,$p' "${BASH_SOURCE[0]}" \
+    | sed -n '2,/^[^#]/p' | sed 's/^# \{0,1\}//' | sed '/^$/d;$d'
+}
 
 [[ $# -gt 0 ]] || { usage; exit 0; }
 
