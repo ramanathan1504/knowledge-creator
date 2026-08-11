@@ -1,0 +1,15 @@
+{
+  "name": "devon",
+  "kind": "kb",
+  "description": "Topic-first archive indexed by DEVONthink — file, index, retrieve",
+  "exec": "./kb",
+  "verbs": {
+    "file": "file",
+    "index": "index",
+    "harvest": "harvest",
+    "map": "map",
+    "digest": "digest",
+    "doctor": "doctor"
+  },
+  "axes": ["topic", "source"]
+}

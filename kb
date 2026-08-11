@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+#
+# kb — one entry point over the archive, so OSS-CLI has something to call.
+#
+#   ./kb file <file.md> [...]   file a written review or note into the archive
+#   ./kb index                  re-read changed files into DEVONthink
+#   ./kb harvest                incremental harvest from every source
+#   ./kb map                    rebuild the topic map
+#   ./kb digest                 rebuild the per-topic digests
+#   ./kb doctor                 is the archive reachable, and when did it last sync
+#
+# This repo grew as a set of scripts, each doing one job well, which is the right
+# shape for a person who knows them. It is the wrong shape for another program:
+# an extension declares ONE executable, and "call whichever of fourteen scripts
+# applies" is not a contract anything can hold. So this dispatches, and adds
+# nothing of its own beyond that.
+#
+# Registered with: oss-cli ext add <this directory>
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+die() { printf '\033[31merror\033[0m %s\n' "$*" >&2; exit 1; }
+
+usage() { sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+
+[[ $# -gt 0 ]] || { usage; exit 0; }
+
+verb=$1; shift
+
+case "$verb" in
+  file)
+    [[ $# -gt 0 ]] || die "file needs at least one markdown file"
+    # --apply is deliberate here. Every script in this repo dry-runs by default,
+    # which is right at a prompt and wrong from a program: OSS-CLI calling `file`
+    # means "file it", and a silent dry run would report success having written
+    # nothing -- the exact failure this archive exists to prevent.
+    exec "$ROOT/pr-review-file.py" "$@" --apply
+    ;;
+  index)
+    exec "$ROOT/devon-index.sh" --sync "$@"
+    ;;
+  harvest)
+    exec "$ROOT/oss-harvest.py" "$@"
+    ;;
+  map)
+    exec "$ROOT/knowledge-map.py" "$@"
+    ;;
+  digest)
+    exec "$ROOT/topic-digest.py" "$@"
+    ;;
+  doctor)
+    # Deliberately not a wrapper around another script: the question "is the
+    # daily job actually succeeding" had no answer anywhere, and its absence let
+    # a scheduled harvest fail for days in a log nobody reads.
+    printf 'archive : %s\n' "$(python3 -c 'import kbpaths; print(kbpaths.ARCHIVE)' 2>/dev/null || echo '(kbpaths not importable)')"
+    if [[ -f $ROOT/logs/oss-harvest.err.log ]]; then
+      last_fail=$(grep -c "STAGES FAILED" "$ROOT/logs/oss-harvest.err.log" 2>/dev/null || echo 0)
+      printf 'harvest : last log has %s failed-stage line(s)\n' "$last_fail"
+      printf '          %s\n' "$(tail -1 "$ROOT/logs/oss-harvest.err.log" 2>/dev/null)"
+    else
+      printf 'harvest : no log yet\n'
+    fi
+    # NOT `launchctl list | grep -q`. Under `set -o pipefail` that reports the
+    # agent as missing precisely WHEN it matches: grep -q exits on the first hit
+    # and closes the pipe, launchctl dies of SIGPIPE, and pipefail returns the
+    # failure. Capture first, match second.
+    agents=$(launchctl list 2>/dev/null || true)
+    case "$agents" in
+      *oss-harvest*) printf 'schedule: launchd agent loaded\n' ;;
+      *) printf 'schedule: \033[33mnot loaded\033[0m — ./oss-harvest-daily.sh --install\n' ;;
+    esac
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    die "unknown verb: $verb (try: file index harvest map digest doctor)"
+    ;;
+esac
