@@ -604,6 +604,40 @@ def main():
             log(f"    {f[0]}/{f[1]}#{f[2]}: {f[3]}")
 
 
+def read_text_resilient(path, retries=4, fallback=""):
+    """Read a file that lives in iCloud, where a plain read can simply fail.
+
+    `OSError: [Errno 11] Resource deadlock avoided` is what iCloud returns while a
+    file is being materialised or is held by another process -- DEVONthink
+    indexing the same folder is the usual other process. It is transient, and it
+    is not a corrupt file or a bug in the caller.
+
+    It killed a whole run once. write_index() reads every note purely to pull a
+    title out of its first heading, and one unreadable file raised out of the
+    entire GitHub stage -- AFTER all the fetching was done, discarding the work
+    and leaving no index at all. A title lookup must never be able to do that.
+
+    So: retry briefly, then give up on THAT FILE and return the fallback. Losing
+    one note's title is a cosmetic loss; losing the index is not.
+    """
+    delay = 0.25
+    for attempt in range(retries):
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError as e:
+            # EDEADLK(11) and EBUSY(16) are the iCloud contention pair. Anything
+            # else -- a real permission problem, a vanished file -- should not be
+            # retried into a silent fallback.
+            if e.errno not in (11, 16) or attempt == retries - 1:
+                if e.errno in (11, 16):
+                    print(f"    ! unreadable after {retries} tries ({path.name}): {e}", flush=True)
+                    return fallback
+                raise
+            time.sleep(delay)
+            delay *= 2
+    return fallback
+
+
 def write_index(root: Path):
     """Regenerated every run; safe to overwrite.
 
@@ -648,7 +682,7 @@ def write_index(root: Path):
                 lines.append(f"- [commits]({rel}/commits.md)")
             for p in notes:
                 title = ""
-                for ln in p.read_text(encoding="utf-8").splitlines():
+                for ln in read_text_resilient(p).splitlines():
                     if ln.startswith("# "):
                         title = ln[2:]
                         break
