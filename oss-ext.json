@@ -1,7 +1,7 @@
 {
   "name": "devon",
   "kind": "kb",
-  "description": "Topic-first archive indexed by DEVONthink — file, index, retrieve",
+  "description": "Topic-first archive indexed by DEVONthink \u2014 file, index, retrieve",
   "exec": "./kb",
   "verbs": {
     "file": "file",
@@ -11,5 +11,14 @@
     "digest": "digest",
     "doctor": "doctor"
   },
-  "axes": ["topic", "source"]
+  "axes": [
+    "topic",
+    "source"
+  ],
+  "docs": [
+    "README.md",
+    "SETUP.md",
+    "DEVELOPING.md",
+    "AI-OPTIONAL.md"
+  ]
 }
