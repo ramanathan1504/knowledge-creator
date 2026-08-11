@@ -14,11 +14,5 @@
   "axes": [
     "topic",
     "source"
-  ],
-  "docs": [
-    "README.md",
-    "SETUP.md",
-    "DEVELOPING.md",
-    "AI-OPTIONAL.md"
   ]
 }
