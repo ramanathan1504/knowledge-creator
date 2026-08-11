@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 #
 # oss-harvest-daily.sh — full knowledge refresh, once a day.
 #
@@ -45,7 +56,13 @@ mkdir -p "$LOGDIR"
 # 2,21 not 2,18: the header grew when --catch-up was added, and a usage() that
 # stops short silently hides the newest flag -- which is the one most likely to
 # be looked for.
-usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() {
+    # Anchored to the licence block, not to line numbers: a header at the top of
+    # the file shifts the doc comment down, and a fixed range then prints the
+    # licence as help text. Content-anchored survives that.
+    sed -n '/limitations under the License\./,$p' "$0" \
+      | sed -n '2,/^[^#]/p' | sed 's/^# \{0,1\}//' | sed '/^$/d;$d'
+}
 
 # ------------------------------------------------------------- install ----
 install_job() {
