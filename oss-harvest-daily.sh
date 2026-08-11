@@ -17,6 +17,7 @@
 #   ./oss-harvest-daily.sh              # run now, as the scheduler would
 #   ./oss-harvest-daily.sh --install    # install the launchd job (09:15 daily)
 #   ./oss-harvest-daily.sh --uninstall  # remove it
+#   ./oss-harvest-daily.sh --catch-up   # run the GitHub stage a locked keychain skipped
 #   ./oss-harvest-daily.sh --status     # is it loaded? when did it last run?
 #
 # launchd rather than cron: cron on macOS is deprecated, does not survive
@@ -41,7 +42,10 @@ DB="${KB_DEVONTHINK_DB:-$HOME/Documents/Knowledge.dtBase2}"
 
 mkdir -p "$LOGDIR"
 
-usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; }
+# 2,21 not 2,18: the header grew when --catch-up was added, and a usage() that
+# stops short silently hides the newest flag -- which is the one most likely to
+# be looked for.
+usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # ------------------------------------------------------------- install ----
 install_job() {
@@ -89,6 +93,29 @@ PLIST_EOF
 
 case "${1:-}" in
     --install)   install_job; exit 0 ;;
+    --catch-up)
+        # Run ONLY the stage a locked keychain caused us to skip, and only if it
+        # was actually skipped. Re-running the whole harvest to recover one
+        # stage would redo four sources that already succeeded, and a catch-up
+        # that is expensive is one nobody runs.
+        marker="$REPO/logs/.github-stage-pending"
+        if [ ! -f "$marker" ]; then
+            echo "nothing pending — the GitHub stage last ran successfully"
+            exit 0
+        fi
+        if ! gh auth status >/dev/null 2>&1; then
+            echo "gh still not authenticated — unlock the screen, then run this again" >&2
+            exit 1
+        fi
+        echo "catching up the GitHub stage (pending since $(cat "$marker"))"
+        if python3 "$HARVEST"; then
+            rm -f "$marker"
+            echo "✓ caught up"
+            exit 0
+        fi
+        echo "catch-up failed; the marker is kept so it can be retried" >&2
+        exit 1
+        ;;
     --uninstall) launchctl unload "$PLIST" 2>/dev/null; rm -f "$PLIST"
                  echo "removed $LABEL"; exit 0 ;;
                  # NOT `launchctl list | grep -q`: grep -q exits on the first
@@ -120,20 +147,70 @@ command -v gh >/dev/null || { echo "gh not on PATH: $PATH" >&2; exit 1; }
 # launchd runs it on wake if the Mac was asleep, which can land BEFORE the
 # keychain is unlocked -- so `gh auth status` fails on a perfectly healthy
 # machine. Retry briefly to let the keychain catch up.
+# A token file, if one exists, removes the keychain from the picture entirely:
+# `gh` prefers GH_TOKEN from the environment and never consults the keyring when
+# it is set. That is the real fix for a scheduled job -- waiting below is only
+# the fallback for a machine that has not been given one.
+#
+# Deliberately a file with 0600 permissions and NOT the plist's
+# EnvironmentVariables: a launchd plist is world-readable by default, is copied
+# into backups, and shows up in `launchctl print`. Neither is encrypted at rest
+# the way the keychain is, which is exactly why this is opt-in and why the token
+# it wants is a READ-ONLY one -- this job only ever reads.
+GH_TOKEN_FILE="${KB_GH_TOKEN_FILE:-$HOME/.config/knowledge-creator/gh-token}"
+if [ -z "${GH_TOKEN:-}" ] && [ -f "$GH_TOKEN_FILE" ]; then
+    perms=$(stat -f "%OLp" "$GH_TOKEN_FILE" 2>/dev/null || echo "?")
+    if [ "$perms" != "600" ]; then
+        echo "  ! $GH_TOKEN_FILE is mode $perms — should be 600. Refusing to read it." >&2
+        echo "    chmod 600 \"$GH_TOKEN_FILE\"" >&2
+    else
+        GH_TOKEN="$(tr -d ' \t\r\n' < "$GH_TOKEN_FILE")"
+        if [ -n "$GH_TOKEN" ]; then
+            export GH_TOKEN
+            echo "  using the token file — no keychain needed"
+        fi
+    fi
+fi
+
+# 40 seconds was not enough, and the logs say so: this failed with github(auth)
+# on consecutive days, every one of them a run that started at exactly 09:15.
+# The machine is asleep at that hour, launchd runs the job on wake, and the
+# login keychain is not readable until the screen is actually unlocked -- which
+# is minutes later, not seconds. Three tries twenty seconds apart could only
+# ever have covered a wake that happened to coincide with an unlock.
+#
+# So wait for the keychain on the timescale a person actually unlocks a laptop.
+# Polling a locked keychain is free; the job is a background agent with nothing
+# waiting on it, and finishing forty minutes late beats not harvesting at all.
+GH_WAIT_SECONDS="${KB_GH_WAIT_SECONDS:-1800}"
 GH_OK=0
-for attempt in 1 2 3; do
+waited=0
+while :; do
     if gh auth status >/dev/null 2>&1; then GH_OK=1; break; fi
-    [ $attempt -lt 3 ] && sleep 20
+    [ "$waited" -ge "$GH_WAIT_SECONDS" ] && break
+    # Announce the wait once, so a log read months later says what it was doing
+    # rather than showing an unexplained gap between two timestamps.
+    [ "$waited" -eq 0 ] && echo "  gh not authenticated yet — waiting up to $((GH_WAIT_SECONDS / 60))m for the keychain (unlock the screen)" >&2
+    sleep 30
+    waited=$((waited + 30))
 done
+[ "$GH_OK" -eq 1 ] && [ "$waited" -gt 0 ] && echo "  gh became available after $((waited / 60))m ${waited}s of waiting" >&2
 
 # Not being able to reach GitHub must NOT abort the run. Six of the seven
 # stages below never touch it, and this check used to `exit 1` before any of
 # them ran -- so one locked keychain froze the AI Studio harvest, the knowledge
 # map, the digests, the gap reports and the blog drafts too. That contradicted
 # the stage-level tolerance documented right underneath it.
+# A marker, so a missed keychain window is recoverable rather than simply lost
+# until tomorrow. --catch-up reads this and runs the one stage that was skipped.
+CATCHUP_MARKER="$REPO/logs/.github-stage-pending"
 if [ $GH_OK -eq 0 ]; then
-    echo "  ! gh not authenticated (keychain locked, or token expired)." >&2
+    echo "  ! gh still not authenticated after $((GH_WAIT_SECONDS / 60))m." >&2
     echo "    Skipping the GitHub stage; every other source still runs." >&2
+    echo "    Recover without waiting for tomorrow:  ./oss-harvest-daily.sh --catch-up" >&2
+    mkdir -p "$REPO/logs" && date -u +%Y-%m-%dT%H:%M:%SZ > "$CATCHUP_MARKER"
+else
+    rm -f "$CATCHUP_MARKER" 2>/dev/null || true
 fi
 
 # Every source, then the derived layer. Harvesting only GitHub left the AI

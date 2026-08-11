@@ -212,3 +212,51 @@ It does not replace your memory, and it is not a chatbot with your files
 attached. It is an archive you own, in a format that outlives every tool that
 reads it, with retrieval bolted on top. Turn the AI off and the archive is still
 there, still searchable, still yours.
+
+## The daily job and GitHub authentication
+
+`oss-harvest-daily.sh` runs at 09:15 from launchd. `gh` keeps its token in the
+macOS keyring, and a launchd job that fires while the Mac is asleep runs on wake
+— **before the screen is unlocked**, when the login keychain cannot be read. That
+is what a `STAGES FAILED: github(auth)` line means; it is not an expired token.
+
+Three things handle it, in order of preference:
+
+### 1. A read-only token file (recommended for a scheduled job)
+
+Removes the keychain from the picture entirely — `gh` prefers `GH_TOKEN` from the
+environment and never consults the keyring when it is set.
+
+```bash
+mkdir -p ~/.config/knowledge-creator
+printf '%s' 'ghp_your_token_here' > ~/.config/knowledge-creator/gh-token
+chmod 600 ~/.config/knowledge-creator/gh-token
+```
+
+**Give it read-only scopes.** This job only ever reads: `public_repo` (or
+`repo` only if you harvest private repositories), and nothing else. A token that
+cannot write is one that cannot post by accident — which matches the rule that
+nothing writes upstream without being named and confirmed.
+
+The file must be mode **600**; the script refuses to read it otherwise and says
+so, rather than quietly using a token any process on the machine could read.
+`KB_GH_TOKEN_FILE` moves it.
+
+> Deliberately **not** the plist's `EnvironmentVariables`: a launchd plist is
+> world-readable, lands in backups, and is printed by `launchctl print`.
+
+### 2. Waiting for the keychain (the fallback)
+
+With no token file, the job waits up to **30 minutes** for the keychain, polling
+every 30 seconds, and logs that it is waiting. `KB_GH_WAIT_SECONDS` tunes it.
+
+### 3. Catching up afterwards
+
+If the window is missed, the GitHub stage is skipped and a marker is left. Run
+the one skipped stage without waiting for tomorrow, and without redoing the four
+sources that already succeeded:
+
+```bash
+./oss-harvest-daily.sh --catch-up      # no-op if nothing is pending
+./kb doctor                            # is it scheduled, and did it fail?
+```
