@@ -244,10 +244,27 @@ printf '%s' 'ghp_your_token_here' > ~/.config/knowledge-creator/gh-token
 chmod 600 ~/.config/knowledge-creator/gh-token
 ```
 
-**Give it read-only scopes.** This job only ever reads: `public_repo` (or
-`repo` only if you harvest private repositories), and nothing else. A token that
-cannot write is one that cannot post by accident — which matches the rule that
-nothing writes upstream without being named and confirmed.
+**Tick no scopes at all.**
+
+A classic token with **zero scopes selected** can read public information and use
+the search API — which is the entire GitHub stage — and it **cannot write
+anywhere**. All three repositories are public, so nothing here needs more.
+
+That is not merely sufficient, it is the safest option available:
+
+| Scope | What it actually grants |
+|---|---|
+| *(none)* | read public data. **Cannot post, comment, or push** ✅ |
+| `public_repo` | read **and write** public repos — could comment on `apache/logging-log4j2` ⚠️ |
+| `repo` | full control of every repository, public and private ⚠️ |
+
+`public_repo` is commonly described as the "read-only" choice and is not one. A
+token that cannot write is the only kind that cannot post by accident, which is
+the same rule the upstream guard enforces — held in a second place, by a
+credential that could not do it even if something tried.
+
+If you later harvest a private repository, prefer a **fine-grained** token
+(read-only permissions on selected repos) over classic `repo`.
 
 The file must be mode **600**; the script refuses to read it otherwise and says
 so, rather than quietly using a token any process on the machine could read.

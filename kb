@@ -78,14 +78,36 @@ case "$verb" in
     chmod 600 "$TOKEN_FILE"
     printf '%s' "$TOKEN" > "$TOKEN_FILE"
     printf '\033[32m✓\033[0m written to %s (mode 600)\n' "$TOKEN_FILE"
-    if GH_TOKEN="$TOKEN" gh auth status >/dev/null 2>&1; then
-      who=$(GH_TOKEN="$TOKEN" gh api user --jq .login 2>/dev/null || echo "?")
-      printf '\033[32m✓\033[0m GitHub accepts it — authenticated as %s\n' "$who"
-      printf '  The 09:15 job no longer depends on the keychain.\n'
-    else
+    if ! GH_TOKEN="$TOKEN" gh auth status >/dev/null 2>&1; then
       printf '\033[31m!\033[0m GitHub REJECTED it. The file was still written; fix or re-run.\n' >&2
       exit 1
     fi
+    who=$(GH_TOKEN="$TOKEN" gh api user --jq .login 2>/dev/null || echo "?")
+    printf '\033[32m✓\033[0m GitHub accepts it — authenticated as %s\n' "$who"
+
+    # "The token works" is not the question. The harvester needs two DIFFERENT
+    # things, and a token can satisfy one while failing the other silently --
+    # which is a stage that quietly returns nothing rather than an error.
+    printf '\n  what this token can actually reach:\n'
+
+    # 1. Public search. This is the whole GitHub stage: `involves:<user>` across
+    #    repos you do not own. A fine-grained token granted only your own repos
+    #    still needs to read these.
+    hits=$(GH_TOKEN="$TOKEN" gh api -X GET search/issues \
+             -f q="involves:${who} repo:apache/logging-log4j2" --jq '.total_count' 2>/dev/null || echo "")
+    if [ -n "$hits" ] && [ "$hits" != "null" ]; then
+      printf '    \033[32m✓\033[0m public search — %s results in apache/logging-log4j2\n' "$hits"
+    else
+      printf '    \033[31m✗\033[0m public search FAILED — the GitHub stage would harvest nothing\n'
+    fi
+
+    # 2. This private repo, only if you want your own private work harvested.
+    if GH_TOKEN="$TOKEN" gh api repos/"${who}"/knowledge-creator --jq .name >/dev/null 2>&1; then
+      printf '    \033[32m✓\033[0m private repo knowledge-creator — readable\n'
+    else
+      printf '    \033[2m·\033[0m private repo knowledge-creator — not readable (fine if you do not harvest it)\n'
+    fi
+    printf '\n  The 09:15 job no longer depends on the keychain.\n'
     ;;
   doctor)
     # Deliberately not a wrapper around another script: the question "is the
