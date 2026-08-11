@@ -228,6 +228,17 @@ Removes the keychain from the picture entirely — `gh` prefers `GH_TOKEN` from 
 environment and never consults the keyring when it is set.
 
 ```bash
+./kb token          # prompts, input hidden, writes the file and checks it
+```
+
+That is the whole thing. It creates the directory, writes mode 600 *before* the
+secret goes in, strips stray whitespace, and asks GitHub whether the token
+actually works — so a bad paste is caught now rather than at 09:15 tomorrow.
+
+The token never appears on screen, in `ps`, or in your shell history. Doing it
+by hand instead:
+
+```bash
 mkdir -p ~/.config/knowledge-creator
 printf '%s' 'ghp_your_token_here' > ~/.config/knowledge-creator/gh-token
 chmod 600 ~/.config/knowledge-creator/gh-token

@@ -7,6 +7,7 @@
 #   ./kb harvest                incremental harvest from every source
 #   ./kb map                    rebuild the topic map
 #   ./kb digest                 rebuild the per-topic digests
+#   ./kb token                  store a GitHub token for the scheduled job (input hidden)
 #   ./kb doctor                 is the archive reachable, and when did it last sync
 #
 # This repo grew as a set of scripts, each doing one job well, which is the right
@@ -50,6 +51,42 @@ case "$verb" in
   digest)
     exec "$ROOT/topic-digest.py" "$@"
     ;;
+  token)
+    # Exists because "put a secret in a file at this path with these permissions"
+    # is three chances to get it wrong, and the failure modes are quiet: a mode
+    # 644 file is refused, a trailing newline can break the token, and a shell
+    # that records history keeps the secret forever.
+    #
+    # read -s so it is never echoed, never in argv (visible to `ps`), and never
+    # in shell history.
+    TOKEN_FILE="${KB_GH_TOKEN_FILE:-$HOME/.config/knowledge-creator/gh-token}"
+    if [ -f "$TOKEN_FILE" ]; then
+      printf 'A token file already exists at %s\n' "$TOKEN_FILE"
+      printf 'Replace it? [y/N] '
+      read -r reply
+      case "$reply" in y|Y|yes|YES) ;; *) echo "unchanged"; exit 0 ;; esac
+    fi
+    printf 'Paste a GitHub token (input hidden, then press Enter): '
+    read -rs TOKEN; echo
+    TOKEN=$(printf '%s' "$TOKEN" | tr -d ' \t\r\n')
+    [ -n "$TOKEN" ] || die "nothing entered; unchanged"
+    mkdir -p "$(dirname "$TOKEN_FILE")"
+    # Create empty and lock it down BEFORE writing: a file that is briefly
+    # world-readable while holding a secret is world-readable at the only moment
+    # that matters.
+    : > "$TOKEN_FILE"
+    chmod 600 "$TOKEN_FILE"
+    printf '%s' "$TOKEN" > "$TOKEN_FILE"
+    printf '\033[32m✓\033[0m written to %s (mode 600)\n' "$TOKEN_FILE"
+    if GH_TOKEN="$TOKEN" gh auth status >/dev/null 2>&1; then
+      who=$(GH_TOKEN="$TOKEN" gh api user --jq .login 2>/dev/null || echo "?")
+      printf '\033[32m✓\033[0m GitHub accepts it — authenticated as %s\n' "$who"
+      printf '  The 09:15 job no longer depends on the keychain.\n'
+    else
+      printf '\033[31m!\033[0m GitHub REJECTED it. The file was still written; fix or re-run.\n' >&2
+      exit 1
+    fi
+    ;;
   doctor)
     # Deliberately not a wrapper around another script: the question "is the
     # daily job actually succeeding" had no answer anywhere, and its absence let
@@ -76,6 +113,6 @@ case "$verb" in
     usage
     ;;
   *)
-    die "unknown verb: $verb (try: file index harvest map digest doctor)"
+    die "unknown verb: $verb (try: file index harvest map digest token doctor)"
     ;;
 esac
