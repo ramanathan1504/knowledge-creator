@@ -46,9 +46,36 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # ---------------------------------------------------------------- config ---
-USER = "ramanathan1504"
-EXCLUDE = "-org:intemo-dev -user:ramanathan1504"
-WINDOW_START = "2025-06-01"
+# Whose activity to harvest. Asked of `gh` rather than hardcoded: this repository
+# is public, and a hardcoded username means anyone who clones it silently
+# harvests SOMEBODY ELSE'S history into their own archive -- which looks like the
+# tool working, and is the most confusing possible failure.
+#
+# KB_GH_USER overrides, for harvesting an account other than the one `gh` is
+# authenticated as.
+def _default_user():
+    env = os.environ.get("KB_GH_USER", "").strip()
+    if env:
+        return env
+    try:
+        r = subprocess.run(["gh", "api", "user", "--jq", ".login"],
+                           capture_output=True, text=True, timeout=30)
+        who = (r.stdout or "").strip()
+        if who:
+            return who
+    except Exception:
+        pass
+    sys.exit("cannot tell whose activity to harvest: set KB_GH_USER, or run `gh auth login`")
+
+
+USER = _default_user()
+
+# Repositories to leave out -- your own forks and any private org whose work does
+# not belong in a personal archive. KB_EXCLUDE replaces this wholesale; the
+# default excludes only the harvesting user's own repos, since those are already
+# yours and add noise rather than history.
+EXCLUDE = os.environ.get("KB_EXCLUDE", f"-user:{USER}")
+WINDOW_START = os.environ.get("KB_WINDOW_START", "2025-06-01")
 
 HOME = Path.home()
 from kbpaths import ARCHIVE as DEVON, SCRIPTS

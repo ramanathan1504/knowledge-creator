@@ -1,6 +1,6 @@
 {
   "name": "devon",
-  "kind": "kb",
+  "kind": "memory",
   "description": "Topic-first archive indexed by DEVONthink \u2014 file, index, retrieve",
   "exec": "./kb",
   "verbs": {
