@@ -102,6 +102,14 @@ def pr_number(path, explicit):
     if explicit:
         return explicit
     m = re.search(r"(?:pr[-_]?|#)(\d{2,6})(?!\d)", path.stem, re.I)
+    if m:
+        return int(m.group(1))
+    # A LEADING run of 3-5 digits is the other deliberate spelling, and the one the reviews
+    # written by hand actually use: `4218-loggercontextadmin-stream-leak.md`. Anchored to the
+    # start and capped at five digits so it cannot swallow a date -- `20260812-notes` is eight,
+    # and `oss-1.7.2-macos26-jvm-crash` does not begin with a digit at all. Both of those were
+    # read as pull requests before, which is the bug this whole function exists to not have.
+    m = re.match(r"(\d{3,5})-", path.stem)
     return int(m.group(1)) if m else None
 
 
