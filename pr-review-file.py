@@ -11,17 +11,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-pr-review-file.py — file a hand-written PR review into the knowledge base.
+pr-review-file.py — file hand-written markdown into the knowledge base.
 
-A review write-up is the one artefact the harvesters cannot produce. `oss-harvest.py`
-collects what was *said publicly* on a thread; a review is the reasoning that got
-there, including the parts that were deliberately never posted. Those were living
-in ~/log4j-pr-review/ where nothing indexed them.
+A write-up is the one artefact the harvesters cannot produce. `oss-harvest.py` collects what
+was *said publicly* on a thread; a write-up is the reasoning that got there, including the
+parts that were deliberately never posted.
 
-This takes the markdown you wrote, derives a retrieval header from the PR itself,
-and files it under the topic that owns the repository:
+Two destinations, chosen by whether the file is about one pull request:
 
-    Projects/<topic>/pr-reviews/YYYYMMDD-<topic>-pr<N>-<slug>.md
+    Projects/<topic>/pr-reviews/YYYYMMDD-<topic>-pr<N>-<slug>.md   a review
+    <Topic>/<slug>.md                                             everything else
+
+A pull request is recognised only from a DELIBERATE marker -- `pr1234`, `pr-1234` or
+`#1234` -- or from `--pr`. There used to be a fallback to any 2-6 digit run in the filename,
+which read `oss-1.7.2-macos26-jvm-crash` as a review of PR 26 and filed it under that
+unrelated pull request's title and tags. Anything without a marker is now filed as a note
+rather than forced through `gh pr view`, which also means a general note finally has a home:
+before this, `oss memory file` on one simply refused.
 
 Usage
 -----
@@ -29,6 +35,10 @@ Usage
     ./pr-review-file.py ~/log4j-pr-review/*.md --apply          # write
     ./pr-review-file.py notes.md --pr 4217 --apply              # number not in filename
     ./pr-review-file.py review.md --repo jreleaser/jreleaser --apply
+    ./pr-review-file.py architecture.md --apply                 # a note, into Tooling/
+    ./pr-review-file.py design.md --topic Reference --apply     # a note, elsewhere
+
+Reviews and notes can be mixed in one call; each file goes where it belongs.
 
 Dry-run by default, like every other script here.
 
@@ -78,12 +88,73 @@ def gh_json(args):
 
 
 def pr_number(path, explicit):
+    """The pull request this file reviews, or None if it does not review one.
+
+    Only a DELIBERATE marker counts: `pr1234`, `pr-1234`, `pr_1234` or `#1234`. There used to
+    be a fallback to any 2-6 digit run in the name, and it was actively harmful -- it read
+    `oss-1.7.2-macos26-jvm-crash` as a review of PR 26 and `20260812-notes` as PR 202608, then
+    filed the note under that unrelated pull request's title with its tags. A wrong answer
+    delivered confidently is worse than no answer, and this archive exists to be trusted a year
+    from now.
+
+    Returning None rather than raising is what lets a general note be filed as a general note.
+    """
     if explicit:
         return explicit
-    m = re.search(r"(?:pr[-_]?)(\d{2,6})", path.stem, re.I) or re.search(r"(\d{2,6})", path.stem)
-    if not m:
-        raise SystemExit(f"{path.name}: no PR number in the filename -- pass --pr N")
-    return int(m.group(1))
+    m = re.search(r"(?:pr[-_]?|#)(\d{2,6})(?!\d)", path.stem, re.I)
+    return int(m.group(1)) if m else None
+
+
+def note_header(path, title, tags, topic, related, filed_on):
+    """Retrieval header for a note that is not about one pull request.
+
+    Same shape as a review's header so one search finds both, minus the fields that only mean
+    something for a pull request. Nothing is invented to fill them.
+    """
+    L = [
+        "---",
+        f"tags: [{', '.join(tags)}]",
+        "kind: note",
+        f"topic: {topic}",
+        f"filed: {filed_on}",
+        "---",
+        "",
+        f"# {title}",
+        "",
+        "**Search Tags/Keywords:** " + " ".join("#" + t for t in tags),
+    ]
+    if related:
+        L += ["", "**Related:** " + " · ".join(f"[[{r}]]" for r in related)]
+    L += ["", "---", ""]
+    return "\n".join(L)
+
+
+def note_title(text, path):
+    """The first heading, else the filename made readable."""
+    for line in text.splitlines()[:40]:
+        if line.startswith("# "):
+            return line[2:].strip()
+    return path.stem.replace("-", " ").replace("_", " ")
+
+
+def note_tags(text, title, topic):
+    """Tags for a general note: the topic, words from the title, and code-ish terms from the body.
+
+    Reuses oss-harvest.py's CODEISH so a note and a review tag the same identifier the same way --
+    two tagging schemes in one archive means two searches to find one thing.
+    """
+    pinned = [topic, "note"]
+    words = [w.lower() for w in re.findall(r"[A-Za-z][A-Za-z0-9_.-]{2,}", title)]
+    body = [m.group(0) for m in CODEISH.finditer(text)]
+    seen, out = set(pinned), list(pinned)
+    for w in words + body:
+        t = slug(w, 40)
+        if t and t not in seen and len(t) > 2:
+            seen.add(t)
+            out.append(t)
+        if len(out) >= 18:
+            break
+    return out
 
 
 def fetch(repo, num):
@@ -230,6 +301,8 @@ def main():
     ap.add_argument("files", nargs="+", type=Path)
     ap.add_argument("--repo", default=DEFAULT_REPO, help=f"default: {DEFAULT_REPO}")
     ap.add_argument("--pr", type=int, help="PR number, when it is not in the filename")
+    ap.add_argument("--topic", default="Tooling",
+                    help="folder for notes that are not PR reviews (default: Tooling)")
     ap.add_argument("--apply", action="store_true", help="write; otherwise dry run")
     args = ap.parse_args()
 
@@ -243,11 +316,18 @@ def main():
               f"filing under 'oss-misc'")
 
     planned = []
+    notes = []
     for src in args.files:
         if not src.is_file():
             print(f"  skip  {src} (not a file)")
             continue
         num = pr_number(src, args.pr)
+        if num is None:
+            # Not about one pull request, so do not pretend it is. It gets a note header and a
+            # topic folder instead of being forced through `gh pr view` -- which is how a crash
+            # write-up once landed under an unrelated PR's title.
+            notes.append(src)
+            continue
         pr = fetch(args.repo, num)
         review = src.read_text(encoding="utf-8")
         issues = [i["number"] for i in (pr.get("closingIssuesReferences") or [])]
@@ -261,6 +341,34 @@ def main():
             dest = folder / f"{stamp}-{topic}-pr{num}-{slug(pr.get('title'), 50)}.md"
             action = "create"
         planned.append((src, dest, pr, tags, issues, action))
+
+    if notes:
+        nfolder = ARCHIVE / args.topic
+        existing_notes = [q.stem for q in nfolder.glob("*.md")] if nfolder.is_dir() else []
+        for src in notes:
+            text = src.read_text(encoding="utf-8")
+            title = note_title(text, src)
+            tags = note_tags(text, title, args.topic.lower())
+            dest = nfolder / f"{slug(title, 60)}.md"
+            action = "update" if dest.exists() else "create"
+            related = [n for n in existing_notes if n != dest.stem][:6]
+            body = note_header(src, title, tags, args.topic.lower(), related,
+                               str(date.today())) + text
+            print(f"  {action:6} {dest.relative_to(ARCHIVE)}")
+            print(f"         {len(tags)} tags · note '{title[:60]}'")
+            if args.apply:
+                nfolder.mkdir(parents=True, exist_ok=True)
+                dest.write_text(body, encoding="utf-8")
+
+    if not planned:
+        if args.apply and notes:
+            print(f"\nfiled into {ARCHIVE / args.topic}")
+            print("source files left in place; delete them yourself once you are happy.")
+        elif not notes:
+            print("nothing to file")
+        else:
+            print("\ndry run — nothing written. Re-run with --apply.")
+        return
 
     # Cross-links need every destination known first, so this is a second pass.
     names = [d.stem for _, d, _, _, _, _ in planned]
