@@ -28,8 +28,8 @@ claude-harvest.py     claude.ai export + Claude Code  -> Markdown
 knowledge-map.py      all notes -> map, snippets, mindmap
 topic-digest.py       all notes -> per-topic digests
 coverage-gap.py       notes vs. official docs -> gap scorecards
-pick-for-me.py        backlog ranked against your own history
-triage.sh             repo backlog -> standalone HTML
+(moved)               backlog ranked against your history is `oss pick`
+(moved)               repo backlog is `oss backlog`
 devon-index.sh        DEVONthink indexing and refresh
 ```
 

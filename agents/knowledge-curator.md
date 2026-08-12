@@ -111,7 +111,7 @@ KC=$(dirname "$(readlink ~/.local/bin/kb)")
 "$KC"/knowledge-map.py                  # dry-run the index layer
 "$KC"/topic-digest.py                   # dry-run the digests
 "$KC"/blog-gen.py --list                # rank publishable work
-"$KC"/pick-for-me.py OWNER/REPO         # what to work on next
+oss pick --repo OWNER/REPO              # what to work on next
 ```
 
 `--status` reads `.oss-harvest-state.json` from the checkout. A job reported as
@@ -136,7 +136,7 @@ and never overwritten.
 `knowledge-map.py` scans `Reference/`, so it was ingesting the snippet library
 it had just written and carrying a leaked credential forward through every
 regeneration. If you add a generator there, add it to `SELF_OUTPUT` in
-`knowledge-map.py` and `EXCLUDE_AS_EVIDENCE` in `pick-for-me.py`.
+`knowledge-map.py`.
 
 **Redaction before writing.** Every harvester replaces credentials with
 `[REDACTED:<type>]`. If you add or change a harvester, it must redact too — one

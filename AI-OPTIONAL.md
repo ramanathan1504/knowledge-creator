@@ -46,7 +46,7 @@ Everything except *asking questions in a sentence*. Concretely:
 | "Find this exact string" | grep / ripgrep | no |
 | "Find this vaguely" | DEVONthink full-text search | no |
 | "Notes similar to this one" | DEVONthink *See Also* | no |
-| "What should I work on next?" | `pick-for-me.py` | no |
+| "What should I work on next?" | `oss pick` — in the core | no |
 
 **Q. What is the right order to search in?**
 
