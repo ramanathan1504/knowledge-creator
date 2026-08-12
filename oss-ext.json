@@ -14,5 +14,7 @@
   "axes": [
     "topic",
     "source"
-  ]
+  ],
+  "archive": "~/Library/Mobile Documents/com~apple~CloudDocs/Documents/Devon Capture",
+  "archiveNote": "Where the notes actually live. Declared so `oss backup` can include them: an archive lives wherever its owner put it, and a backup that guesses is a backup that quietly misses the thing it existed to protect."
 }
