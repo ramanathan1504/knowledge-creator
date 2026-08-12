@@ -174,13 +174,13 @@ filter; what makes it a Log4j filter is the class names.
 ### What to pick up next
 
 ```bash
-pick-for-me.py apache/logging-log4j2 --write
+oss pick --repo apache/logging-log4j2
 ```
 
 Ranks the repo's open backlog against **my** history rather than community
 popularity, in four sections: finish what you started · awaiting my reply ·
 best new picks · review queue. Each recommendation names the notes that make me
-the right person for it. Companion to `triage.sh`, which answers the different
+the right person for it. Companion to `oss backlog`, which answers the different
 question of "what is the state of this repo".
 
 ### Turning finished work into posts
@@ -257,9 +257,9 @@ gone within a day.
 | `coverage-gap.py`         | `Reference/gaps/<tech>.md` — the base vs. the official manual, what is missing                |
 | `topic-refile.py`         | one-off: inverted `Projects/` from source-first to topic-first                                |
 | `blog-gen.py`             | finished OSS work → publishable drafts, scored and ranked                                     |
-| `pick-for-me.py`          | personalised backlog ranking                                                                  |
+| _moved_                   | personalised ranking is `oss pick`                                                                  |
 | `pr-review-file.py`       | a hand-written PR review → `Projects/<topic>/pr-reviews/`, header derived from the PR         |
-| `triage.sh`               | repo backlog triage → self-contained HTML                                                     |
+| _moved_                   | `oss backlog` — it never touched the archive                                                  |
 | ~~`log4j-pr-review.sh`~~  | **moved** — now `bench review <n>` in `log4j2-workout`, plus red/green gates                  |
 | `devon-clean-existing.py` | one-off: tidied the original capture folder                                                   |
 | `devon-migrate.py`        | one-off: moved the Obsidian vault in                                                          |
@@ -328,7 +328,7 @@ its own output — a leaked credential in a snippet library got copied forward
 every regeneration, and redacting the true source did nothing. Both generators
 now skip everything they produce, `Reference/topics/` included. Any new
 generator writing under `Reference/` must be added to `SELF_OUTPUT` in
-`knowledge-map.py` and `EXCLUDE_AS_EVIDENCE` in `pick-for-me.py`.
+`knowledge-map.py`.
 
 `Blog/` is the exception: drafts are written once and never overwritten, so
 edit them freely. `blog-gen.py` skips anything already drafted — delete a file
