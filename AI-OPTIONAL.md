@@ -122,22 +122,29 @@ tighter than the model list suggests. Of what you already have pulled:
 | `qwen3:8b` | 5.2 GB | borderline, pressure with anything else open |
 | `qwen3:4b` | 2.5 GB | **the practical working model** |
 | `qwen3-log4j` | 1.2 GB | your custom one — fast, narrow |
-| `all-minilm` | 45 MB | **the important one, see below** |
 
-Treat `qwen3:4b` as the daily driver and `qwen3:8b` as the "close everything
-else first" option. `qwen3:14b` is not a realistic choice on this machine.
+These are chat models — the generation half. Treat `qwen3:4b` as the daily
+driver and `qwen3:8b` as the "close everything else first" option. `qwen3:14b`
+is not a realistic choice on this machine. Nothing here does the embedding;
+that is covered next.
 
-**Q. Why is the 45 MB model the important one?**
+**Q. Which of these does the embedding?**
 
-Because the base is ~6M tokens. No model — local or cloud, today or in five
-years — puts that in a context window. *Every* setup must retrieve first and
-read second. So the component that decides whether your knowledge base feels
-smart is the **embedding model**, not the chat model.
+None. The core does, inside its own process. It ships a small ONNX embedder
+(all-MiniLM-L6-v2, quantised, about 22 MB) that you fetch once with `oss model
+--fetch`; it lands in `~/.oss-cli/models`. There is no Ollama model to pull for
+this, no server to keep running, and nothing to choose. Ollama is used here only
+for chat and generation.
 
-`all-minilm` embeds all 556 notes in minutes, runs entirely on CPU, costs
-nothing per query, and gives you the one thing grep cannot: finding a note
-that means what you asked without containing the words you used. That is the
-single highest-value local AI step, and it is also the cheapest.
+That embedder matters more than the chat model. The base is ~6M tokens. No model
+— local or cloud, today or in five years — puts that in a context window.
+*Every* setup must retrieve first and read second, so retrieval quality sets the
+ceiling: a bigger chat model cannot recover text the embedder never read.
+
+It embeds all 556 notes in minutes, runs entirely on CPU, costs nothing per
+query, and gives you the one thing grep cannot: finding a note that means what
+you asked without containing the words you used. Skip the fetch and search still
+answers, by shared terms rather than shared meaning — weaker, not broken.
 
 Reasonable expectation: semantic search over the whole base, answers cited
 back to real notes, on a machine with no network. That is genuinely close to
@@ -168,14 +175,17 @@ it is the one you can have.
 
 **Q. What would I set up, in order?**
 
-1. Embed all 556 notes with `all-minilm`, store the vectors locally.
+1. Fetch the built-in embedder once (`oss model --fetch`), embed all 556 notes,
+   store the vectors locally.
 2. Wire a query path: question → embed → top-N notes → feed to `qwen3:4b`
    with a hard rule to cite file paths and refuse when the notes don't cover it.
 3. Keep it a thin terminal command, so it sits beside grep rather than
    replacing it.
 4. Re-embed when the harvesters run. Same cadence as `devon-index.sh --sync`.
 
-No new infrastructure. Ollama is already installed and the models are pulled.
+No new infrastructure. The embedder ships inside the core, and Ollama — needed
+only for step 2, the generation half — is already installed with the models
+pulled.
 
 ---
 
