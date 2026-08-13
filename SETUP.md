@@ -7,9 +7,9 @@ This describes two programs that work together. You can run either one alone.
 - **knowledge-creator** (this repo, Python) — the **archive**. Harvests everything you
   have worked on into plain Markdown, redacts secrets on the way in, and builds
   derived indexes. Uses no AI at all.
-- **self-analyse** (Java) — the **workbench**. Reads that Markdown, embeds it,
-  and answers questions about your own history. Uses whatever model you point
-  it at.
+- **self-analyse** (Java) — the **workbench**. Reads that Markdown, embeds it
+  in its own process, and answers questions about your own history with
+  whatever model you point it at.
 
 Companion reading: [`AI-OPTIONAL.md`](AI-OPTIONAL.md) for how much works with no
 AI, [`DEVELOPING.md`](DEVELOPING.md) if you intend to change the code.
@@ -42,15 +42,20 @@ Two rules the whole design rests on:
 |---|---|---|
 | Python 3.9+ | the archive | standard library only |
 | Java 17 + Maven | the workbench | |
-| An embedding model server | the workbench | Ollama by default; any HTTP-compatible endpoint |
+| ~22 MB for the embedder | the workbench | `oss model --fetch`, once, into `~/.oss-cli/models` |
 | `gh` CLI, authenticated | harvesting GitHub | `gh auth login` |
 | DEVONthink (macOS) | **optional** | search UI; the base works without it |
+| Ollama | **optional** | local text generation only — never used for embedding |
 
-**Model choice is yours.** The workbench stores a model name in config, not in
-code. Small embedding models are fast and cheap; larger ones retrieve better.
-Pick whatever your machine and budget support — the system records which model
-produced each vector so you can change your mind later without corrupting
-anything (see §6).
+**Embedding needs nothing running; the answering model is your choice.** The
+workbench embeds text inside its own process, so there is no server to start,
+no endpoint to configure and no embedding model to pick (see §6). Until you
+fetch the model, search still works — it falls back to matching terms instead
+of meaning rather than failing.
+
+The model that *answers* questions is a name in config, not in code. Pick
+whatever your machine and budget support — local through Ollama, or a cloud
+model you paste into.
 
 ---
 
@@ -159,17 +164,27 @@ comparison, so it is cheap.
 
 ---
 
-## 6. Changing your embedding model
+## 6. The embedder
 
-Vectors from different models are not comparable. A 384-dimension vector and a
-768-dimension one produce meaningless similarity scores rather than an error, so
-mixing them degrades results with no visible failure.
+The workbench embeds text itself, in the same process, using all-MiniLM-L6-v2
+(quantised, ~22 MB, 384 dimensions). Fetch it once:
 
-Each vector is therefore stored with the model that produced it. Change the
-model and the next sync notices, re-embeds, and tells you:
+```bash
+oss model --fetch
+```
+
+It lands in `~/.oss-cli/models` and is not something you choose or configure.
+Search works before you fetch it, by shared terms rather than shared meaning, so
+a missing model is a weaker answer and not an error.
+
+Vectors from different embedders are not comparable, and the failure is silent:
+mismatched vectors produce a plausible-looking similarity score rather than a
+complaint. Each vector is therefore stored with the name of the embedder that
+produced it, so vectors left over from an older setup are spotted and re-embedded
+on the next sync:
 
 ```
-Embedding model changed (all-minilm -> nomic-embed-text) — re-embedding 'note.md'...
+Embedding model changed (all-minilm -> all-MiniLM-L6-v2-onnx) — re-embedding 'note.md'...
 ```
 
 Nothing to clean up by hand. Rows written before this existed have no recorded
