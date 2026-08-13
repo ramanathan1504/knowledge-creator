@@ -13,7 +13,7 @@
 #
 # oss-harvest-daily.sh — full knowledge refresh, once a day.
 #
-# Five stages, then a DEVONthink index nudge:
+# Five collection stages, then embedding, then a DEVONthink index nudge:
 #   1. GitHub          incremental, off the state-file watermark
 #   2. Google AI Studio conversations, pastes, documents, images
 #   3. Claude          newest claude.ai export + local Claude Code sessions
@@ -21,6 +21,7 @@
 #   4b. Topic digests  problem -> resolution, read out of the notes
 #   4c. Coverage gaps  the base vs. the official manuals — what is MISSING
 #   5. Blog drafts     scaffolds for newly-completed work, 2/day, no AI
+#   6. Embed           oss sync --me — what is written becomes retrievable
 #
 # Stages are independent: a missing Google Drive mount or absent export is
 # reported, not fatal. Keeps a rolling log.
@@ -241,9 +242,23 @@ FAILED=""
 
 # 1. GitHub — incremental. No --full: the state file carries the watermark, so
 #    only threads that actually changed are re-fetched and rewritten.
+#
+#    KB_HARVEST_REPOS additionally pulls every thread in the repositories it
+#    names, not only the ones I am attached to. That is the material you need to
+#    work on something you have not touched yet: the core stores an issue's body
+#    and a count of its comments, never their text. Unset means nobody's
+#    repository is harvested by default, which is the right default -- naming
+#    them is a decision with a rate-limit cost.
+#
+#      export KB_HARVEST_REPOS="owner/name owner/other"
 echo; echo "[1/5] GitHub"
 if [ $GH_OK -eq 1 ]; then
-    python3 "$HARVEST" || FAILED="$FAILED github"
+    REPO_ARGS=()
+    for nwo in ${KB_HARVEST_REPOS:-}; do
+        REPO_ARGS+=(--repo "$nwo")
+    done
+    [ ${#REPO_ARGS[@]} -gt 0 ] && echo "  also scanning: ${KB_HARVEST_REPOS}"
+    python3 "$HARVEST" "${REPO_ARGS[@]}" || FAILED="$FAILED github"
 else
     echo "  skipped — gh not authenticated"
     FAILED="$FAILED github(auth)"
@@ -323,6 +338,25 @@ python3 "$REPO/coverage-gap.py" --apply 2>&1 | grep -E "applied|wrote" \
 echo; echo "[5/5] Blog drafts"
 python3 "$REPO/blog-gen.py" --top 2 --apply 2>&1 | tail -4 \
     || FAILED="$FAILED blog-gen"
+
+# 6. Embed what the day wrote.
+#
+# Harvesting and vectorising are two steps joined by a path: these stages write
+# Markdown into the archive, and `oss sync --me` reads the configured note
+# folders and embeds them. Without this the day's work is on disk and invisible
+# -- searchable by filename, absent from every answer -- which looks exactly
+# like a harvest that did not run. The whole point of collecting a discussion is
+# that the next question can find it.
+#
+# Incremental: a note is re-embedded only when its content changed or the
+# embedder that produced its vectors is not the one running now.
+echo; echo "[6/6] Embedding the archive"
+if command -v oss >/dev/null 2>&1; then
+    oss sync --me 2>&1 | tail -3 || FAILED="$FAILED embed"
+else
+    echo "  skipped — 'oss' is not on PATH; run 'oss sync --me' to make today searchable"
+    FAILED="$FAILED embed(no-oss)"
+fi
 
 [ -n "$FAILED" ] && echo && echo "STAGES FAILED:$FAILED" >&2
 

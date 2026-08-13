@@ -173,9 +173,20 @@ def graphql(query, **variables):
 
 
 # ------------------------------------------------------------- discovery ---
-def search_issues(qualifier, since):
-    """Page through the Search API, returning (owner, repo, number, updated)."""
-    q = f"{qualifier} updated:{since}..{NOW:%Y-%m-%d} {EXCLUDE}"
+def search_issues(qualifier, since, exclude=True):
+    """Page through the Search API, returning (owner, repo, number, updated).
+
+    `exclude` off for a qualifier that already names its repository. EXCLUDE is
+    `-user:<me>` by default, which keeps my own repositories out of an archive of
+    contributions to other people's -- correct for "everything I am involved in",
+    and a contradiction for "everything in this repository" when the repository
+    is mine. GitHub does not reject the contradiction: it drops the `repo:`
+    filter and returns a thousand threads from everywhere, which looks like a
+    wildly productive scan and is entirely the wrong material.
+    """
+    q = f"{qualifier} updated:{since}..{NOW:%Y-%m-%d}"
+    if exclude:
+        q = f"{q} {EXCLUDE}"
     found, page = [], 1
     while page <= 10:                      # Search API caps at 1000 results
         data = gh_json(["api", "-X", "GET", "search/issues",
@@ -192,6 +203,27 @@ def search_issues(qualifier, since):
             break
         page += 1
     return found
+
+
+def discover_repos(repos, since):
+    """Every thread in a repository, whether or not I am attached to it.
+
+    `discover` answers "what have I touched", which is the right question for a
+    record of your own work and the wrong one for working on something new: an
+    issue you are about to pick up is, by definition, one you have never
+    commented on. Its discussion is then the one thing not on disk -- the core
+    stores an issue's body and a count of its comments, never their text.
+
+    Scoped to named repositories and to the same watermark as everything else,
+    because "every thread in every repository" is not a thing anyone wants.
+    """
+    seen = {}
+    for nwo in repos:
+        hits = search_issues(f"repo:{nwo}", since, exclude=False)
+        log(f"  repo:{nwo:37s} {len(hits):4d}")
+        for owner, repo, num, updated in hits:
+            seen[(owner, repo, num)] = updated
+    return seen
 
 
 def discover(since):
@@ -356,7 +388,7 @@ def fmt_body(text, indent=""):
     return "\n".join(indent + ln for ln in text.replace("\r\n", "\n").rstrip().split("\n"))
 
 
-def render(node, owner, repo):
+def render(node, owner, repo, source="involved"):
     is_pr = node["__typename"] == "PullRequest"
     kind = "PR" if is_pr else "Issue"
     num = node["number"]
@@ -383,7 +415,12 @@ def render(node, owner, repo):
         role.append("commenter")
     if mine_threads:
         role.append("inline-reviewer")
-    role = ", ".join(role) or "participant"
+    # "participant" was a safe default while every harvested thread was one I had
+    # touched. Repository-wide harvesting breaks that: most of what it collects I
+    # have no part in, and labelling it "participant" would file somebody else's
+    # conversation as my own work. Retrieval leans on this -- what I decided and
+    # what I merely read are different kinds of evidence for the next question.
+    role = ", ".join(role) or "none"
 
     L = []
     A = L.append
@@ -393,6 +430,11 @@ def render(node, owner, repo):
     A(f"url: {node['url']}")
     A(f"kind: {kind.lower()}")
     A(f"my_role: {role}")
+    # How this note came to exist, kept separate from my_role because they answer
+    # different questions: one is why it was fetched, the other is what I did in
+    # it. A thread found by a repository scan that I turn out to have commented
+    # on is still my work, and reads as such.
+    A(f"source: {source}")
     A(f"state: {node.get('state')}" + (" (merged)" if node.get("merged") else ""))
     A(f"created: {node.get('createdAt')}")
     A(f"updated: {node.get('updatedAt')}")
@@ -533,11 +575,17 @@ def main():
     full = "--full" in argv
     limit = None
     since = None
+    repos = []
     for i, a in enumerate(argv):
         if a == "--limit":
             limit = int(argv[i + 1])
         if a == "--since":
             since = argv[i + 1]
+        # Repeatable: --repo owner/name --repo owner/other. Named explicitly
+        # rather than discovered, because harvesting a repository you merely
+        # watch is a decision with a cost, not a default.
+        if a == "--repo":
+            repos.append(argv[i + 1])
 
     state = load_state()
     if since is None:
@@ -549,7 +597,23 @@ def main():
         f"({'probe' if probe else 'full' if full else 'incremental'}) ===")
 
     items = discover(since)
+    involved = set(items)
     log(f"discovered {len(items)} distinct issues/PRs")
+
+    if repos:
+        scanned = discover_repos(repos, since)
+        # setdefault, so a thread found both ways keeps the earlier watermark and
+        # stays in `involved`. One thread is one note; harvesting it twice under
+        # two provenances would put the same conversation in the corpus twice and
+        # let a duplicate outrank a better match.
+        for key, updated in scanned.items():
+            items.setdefault(key, updated)
+        # "not already found" rather than "not mine": the involvement search
+        # excludes my own repositories by default, so plenty of what lands here
+        # is my own work. What each note actually was is decided per note, from
+        # who wrote what in it, not from how it was discovered.
+        log(f"repository scan added {len(items) - len(involved)} thread(s) not "
+            f"already found, across {len(repos)} repo(s)")
 
     commits = fetch_commits(since)
     log(f"discovered {len(commits)} commits "
@@ -578,7 +642,8 @@ def main():
             d.mkdir(parents=True, exist_ok=True)
             kind = "pr" if node["__typename"] == "PullRequest" else "issue"
             path = d / f"{kind}-{number:05d}-{slug(node.get('title'))}.md"
-            path.write_text(render(node, owner, repo), encoding="utf-8")
+            source = "involved" if (owner, repo, number) in involved else "repo-scan"
+            path.write_text(render(node, owner, repo, source), encoding="utf-8")
             written += 1
             if i % 10 == 0 or i == len(todo):
                 log(f"  {i}/{len(todo)} … {owner}/{repo}#{number}")
