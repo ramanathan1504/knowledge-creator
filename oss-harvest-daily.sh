@@ -257,8 +257,17 @@ if [ $GH_OK -eq 1 ]; then
     for nwo in ${KB_HARVEST_REPOS:-}; do
         REPO_ARGS+=(--repo "$nwo")
     done
-    [ ${#REPO_ARGS[@]} -gt 0 ] && echo "  also scanning: ${KB_HARVEST_REPOS}"
-    python3 "$HARVEST" "${REPO_ARGS[@]}" || FAILED="$FAILED github"
+    if [ ${#REPO_ARGS[@]} -gt 0 ]; then
+        echo "  also scanning: ${KB_HARVEST_REPOS}"
+        python3 "$HARVEST" "${REPO_ARGS[@]}" || FAILED="$FAILED github"
+    else
+        # Expanded separately rather than as an empty "${REPO_ARGS[@]}". macOS ships
+        # bash 3.2, where expanding an empty array under `set -u` is an unbound
+        # variable error rather than nothing at all -- so with KB_HARVEST_REPOS unset,
+        # which is the ordinary case, the daily harvest died on its first step every
+        # time and said only "REPO_ARGS[@]: unbound variable".
+        python3 "$HARVEST" || FAILED="$FAILED github"
+    fi
 else
     echo "  skipped — gh not authenticated"
     FAILED="$FAILED github(auth)"
