@@ -156,8 +156,33 @@ case "${1:-}" in
 esac
 
 # ----------------------------------------------------------- the daily run --
+RUN_STARTED="$(date '+%Y-%m-%d %H:%M:%S')"
+
+# The same banner on BOTH streams, because launchd sends them to two different
+# files and only stdout had one. The error log was append-only and undated, so a
+# traceback from three days ago was indistinguishable from one from this morning
+# -- which is exactly how a fixed iCloud failure got diagnosed a second time,
+# while the thing that had actually broken the run went unread two lines below.
+#
+# A closing marker as well: a run that died mid-stage leaves a header with no
+# footer, which says "this one did not finish" without anybody having to
+# reconstruct it from timestamps.
 echo "───────────────────────────────────────────────"
-echo "knowledge refresh  $(date '+%Y-%m-%d %H:%M:%S')"
+echo "knowledge refresh  $RUN_STARTED"
+{
+    echo "═══════════════════════════════════════════════"
+    echo "run started  $RUN_STARTED  (pid $$)"
+} >&2
+
+run_footer() {
+    local status=$?
+    {
+        echo "run ended    $(date '+%Y-%m-%d %H:%M:%S')  exit $status"
+        echo
+    } >&2
+    return $status
+}
+trap run_footer EXIT
 
 command -v gh >/dev/null || { echo "gh not on PATH: $PATH" >&2; exit 1; }
 
