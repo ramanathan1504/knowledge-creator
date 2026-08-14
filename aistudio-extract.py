@@ -45,6 +45,7 @@ from pathlib import Path
 
 HOME = Path.home()
 from kbpaths import AISTUDIO as SRC
+from kbio import read_text_resilient
 from kbpaths import ARCHIVE as DEVON
 PROJ = DEVON / "Projects"
 SOURCE = "ai-studio"
@@ -377,42 +378,50 @@ def main():
             print(f"  FAILED {p.name}: {str(e)[:90]}")
 
     for p in docs:
-        if p.suffix.lower() in (".rtf", ".docx"):
-            out = subprocess.run(["textutil", "-convert", "txt", "-stdout", str(p)],
-                                 capture_output=True, text=True)
-            if out.returncode == 0:
-                body = redact(out.stdout)
+        # Guarded like the two loops above it, which this one was not. A single
+        # unreadable file -- a Google Drive read that timed out while the daemon
+        # materialised it -- raised straight out of main() and ended the whole
+        # AI Studio stage, discarding every document already converted.
+        try:
+            if p.suffix.lower() in (".rtf", ".docx"):
+                out = subprocess.run(["textutil", "-convert", "txt", "-stdout", str(p)],
+                                     capture_output=True, text=True)
+                if out.returncode == 0:
+                    body = redact(out.stdout)
+                    topic = classify(p.stem, body)[1]
+                    tags = keywords(p.stem, body, topic)
+                    root = tech_dir(topic, "documents")
+                    root.mkdir(parents=True, exist_ok=True)
+                    (root / f"{slug(p.stem)}.md").write_text(
+                        header(p.stem, topic, tags, gh_refs(body),
+                               f"kind: converted-{p.suffix.lstrip('.')}\n")
+                        + body, encoding="utf-8")
+                    written += 1
+                    continue
+            if p.suffix.lower() == ".md":
+                body = redact(read_text_resilient(p))
                 topic = classify(p.stem, body)[1]
-                tags = keywords(p.stem, body, topic)
                 root = tech_dir(topic, "documents")
                 root.mkdir(parents=True, exist_ok=True)
-                (root / f"{slug(p.stem)}.md").write_text(
-                    header(p.stem, topic, tags, gh_refs(body),
-                           f"kind: converted-{p.suffix.lstrip('.')}\n")
-                    + body, encoding="utf-8")
-                written += 1
+                # Write the REDACTED body. This used to compute `body` and then
+                # shutil.copy2 the original over the top, so the scrub was discarded
+                # and the raw file landed in the archive.
+                (root / p.name).write_text(body, encoding="utf-8")
                 continue
-        if p.suffix.lower() == ".md":
-            body = redact(p.read_text(encoding="utf-8", errors="replace"))
-            topic = classify(p.stem, body)[1]
-            root = tech_dir(topic, "documents")
-            root.mkdir(parents=True, exist_ok=True)
-            # Write the REDACTED body. This used to compute `body` and then
-            # shutil.copy2 the original over the top, so the scrub was discarded
-            # and the raw file landed in the archive.
-            (root / p.name).write_text(body, encoding="utf-8")
-            continue
-        # Attachments. Text-shaped ones still go through the scrubber: a .txt
-        # attachment carried a live password and an auth token into the archive,
-        # because "not a note" was treated as "nothing to redact".
-        adocs = ASSETS / "documents"
-        adocs.mkdir(parents=True, exist_ok=True)
-        if p.suffix.lower() in (".txt", ".json"):
-            (adocs / p.name).write_text(
-                redact(p.read_text(encoding="utf-8", errors="replace")), encoding="utf-8")
-            continue
-        # PDFs and zips are binary; copying is all that is possible here.
-        shutil.copy2(p, adocs / p.name)
+            # Attachments. Text-shaped ones still go through the scrubber: a .txt
+            # attachment carried a live password and an auth token into the archive,
+            # because "not a note" was treated as "nothing to redact".
+            adocs = ASSETS / "documents"
+            adocs.mkdir(parents=True, exist_ok=True)
+            if p.suffix.lower() in (".txt", ".json"):
+                (adocs / p.name).write_text(
+                    redact(read_text_resilient(p)), encoding="utf-8")
+                continue
+            # PDFs and zips are binary; copying is all that is possible here.
+            shutil.copy2(p, adocs / p.name)
+        except Exception as e:
+            print(f"  FAILED {p.name}: {str(e)[:90]}")
+
 
     if not NO_ASSETS and images:
         ASSETS.mkdir(parents=True, exist_ok=True)
