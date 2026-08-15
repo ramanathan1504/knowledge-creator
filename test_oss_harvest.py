@@ -16,8 +16,16 @@
 #   python3 -m unittest discover -p 'test_*.py'
 #
 # Standard library only, like everything else here. Nothing below touches the
-# network: the module is imported with KB_GH_USER and KB_ARCHIVE preset so its
-# import-time `gh api user` call and archive lookup never run.
+# network: the module is imported with KB_GH_USER and KB_ARCHIVE preset so the
+# `gh api user` call and archive lookup never run.
+#
+# Presetting KB_GH_USER is also what hid a real bug for months. The user was
+# resolved at IMPORT time, so importing this module cost a `gh api user` call --
+# and pr-review-file.py imports it purely to borrow slug() and CODEISH. With the
+# wifi off, `oss memory file notes.md` -- a local write of a local file -- died
+# with "cannot tell whose activity to harvest". Every test here set the variable
+# first, so no test ever imported the module the way the real caller does.
+# ImportCostsNothing below imports it the way the real caller does.
 #
 # The frontmatter tests are a CONTRACT, not an implementation detail. The
 # workbench decides whether a note is your own work or material you merely
@@ -182,6 +190,82 @@ class Slugs(unittest.TestCase):
 
     def test_nothing_is_survivable(self):
         self.assertIsInstance(harvest.slug(""), str)
+
+
+class ImportCostsNothing(unittest.TestCase):
+    """Importing this module must not spend the network.
+
+    It is imported by pr-review-file.py for its naming conventions alone. When
+    the user lookup ran at import time, that import shelled out to `gh api user`
+    -- so filing a note, which needs no GitHub at all, failed on a machine with
+    no connection. A module that cannot be imported offline cannot be borrowed
+    from offline.
+    """
+
+    def _import_fresh(self, env):
+        """Import a second, independent copy under a given environment."""
+        import subprocess
+        import sys
+
+        script = (
+            "import importlib.util, sys;"
+            "spec = importlib.util.spec_from_file_location('fresh', %r);"
+            "m = importlib.util.module_from_spec(spec);"
+            "sys.modules['fresh'] = m;"
+            "spec.loader.exec_module(m);"
+            "print(m.slug('Rollover Compression Fails'))"
+        ) % str(Path(__file__).with_name("oss-harvest.py"))
+        return subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True, text=True, cwd=str(Path(__file__).parent), env=env,
+        )
+
+    def test_imports_with_no_user_resolvable(self):
+        # No KB_GH_USER, and a `gh` on PATH that fails the way an offline one does.
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "gh"
+            fake.write_text("#!/bin/sh\nexit 1\n")
+            fake.chmod(0o755)
+
+            env = dict(os.environ)
+            env.pop("KB_GH_USER", None)
+            env["PATH"] = f"{tmp}:{env['PATH']}"
+            env.setdefault("KB_ARCHIVE", "/tmp/kb-archive-under-test")
+
+            r = self._import_fresh(env)
+
+            self.assertEqual(r.returncode, 0, f"import failed offline:\n{r.stderr}")
+            self.assertNotIn("cannot tell whose activity to harvest", r.stderr)
+            self.assertEqual(r.stdout.strip(), "rollover-compression-fails")
+
+    def test_the_user_is_still_demanded_when_actually_harvesting(self):
+        # Lazy must not mean optional. Anything that genuinely needs to know whose
+        # history this is still refuses rather than harvesting somebody else's.
+        #
+        # `gh` is sabotaged rather than trusted to fail: this machine has a working
+        # one, and the first version of this test PASSED THROUGH TO THE REAL API and
+        # then failed the assertion. A test whose result depends on whether the
+        # developer happens to be logged in is testing the developer.
+        import tempfile
+
+        harvest._USER = None
+        real_path = os.environ["PATH"]
+        real_user = os.environ.pop("KB_GH_USER", None)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                fake = Path(tmp) / "gh"
+                fake.write_text("#!/bin/sh\nexit 1\n")
+                fake.chmod(0o755)
+                os.environ["PATH"] = f"{tmp}:{real_path}"
+
+                with self.assertRaises(SystemExit):
+                    harvest.gh_user()
+        finally:
+            os.environ["PATH"] = real_path
+            os.environ["KB_GH_USER"] = real_user or "test-user"
+            harvest._USER = None
 
 
 if __name__ == "__main__":
