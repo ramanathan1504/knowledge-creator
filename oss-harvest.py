@@ -64,28 +64,45 @@ from pathlib import Path
 #
 # KB_GH_USER overrides, for harvesting an account other than the one `gh` is
 # authenticated as.
-def _default_user():
+#
+# Resolved on first use, NOT at import. This module is imported by
+# pr-review-file.py purely to borrow its filename and tagging conventions, and
+# when the resolution ran at import time that import called `gh api user` --
+# which meant `oss memory file notes.md`, a local write of a local file, died
+# with "cannot tell whose activity to harvest" the moment the wifi was off. A
+# module must not spend the network to be imported.
+_USER = None
+
+
+def gh_user():
+    global _USER
+    if _USER is not None:
+        return _USER
     env = os.environ.get("KB_GH_USER", "").strip()
     if env:
-        return env
+        _USER = env
+        return _USER
     try:
         r = subprocess.run(["gh", "api", "user", "--jq", ".login"],
                            capture_output=True, text=True, timeout=30)
         who = (r.stdout or "").strip()
         if who:
-            return who
+            _USER = who
+            return _USER
     except Exception:
         pass
     sys.exit("cannot tell whose activity to harvest: set KB_GH_USER, or run `gh auth login`")
 
 
-USER = _default_user()
-
 # Repositories to leave out -- your own forks and any private org whose work does
 # not belong in a personal archive. KB_EXCLUDE replaces this wholesale; the
 # default excludes only the harvesting user's own repos, since those are already
-# yours and add noise rather than history.
-EXCLUDE = os.environ.get("KB_EXCLUDE", f"-user:{USER}")
+# yours and add noise rather than history. Lazy for the same reason as gh_user().
+def exclude_qualifier():
+    env = os.environ.get("KB_EXCLUDE")
+    return env if env is not None else f"-user:{gh_user()}"
+
+
 WINDOW_START = os.environ.get("KB_WINDOW_START", "2025-06-01")
 
 HOME = Path.home()
@@ -177,7 +194,7 @@ def graphql(query, **variables):
 def search_issues(qualifier, since, exclude=True):
     """Page through the Search API, returning (owner, repo, number, updated).
 
-    `exclude` off for a qualifier that already names its repository. EXCLUDE is
+    `exclude` off for a qualifier that already names its repository. The exclusion is
     `-user:<me>` by default, which keeps my own repositories out of an archive of
     contributions to other people's -- correct for "everything I am involved in",
     and a contradiction for "everything in this repository" when the repository
@@ -187,7 +204,7 @@ def search_issues(qualifier, since, exclude=True):
     """
     q = f"{qualifier} updated:{since}..{NOW:%Y-%m-%d}"
     if exclude:
-        q = f"{q} {EXCLUDE}"
+        q = f"{q} {exclude_qualifier()}"
     found, page = [], 1
     while page <= 10:                      # Search API caps at 1000 results
         data = gh_json(["api", "-X", "GET", "search/issues",
@@ -230,11 +247,11 @@ def discover_repos(repos, since):
 def discover(since):
     """Union of every way I can be attached to a thread."""
     qualifiers = [
-        f"involves:{USER}",              # author, assignee, mentions, commenter
-        f"reviewed-by:{USER} type:pr",   # reviews are NOT covered by involves
-        f"review-requested:{USER} type:pr",
-        f"commenter:{USER}",
-        f"mentions:{USER}",
+        f"involves:{gh_user()}",              # author, assignee, mentions, commenter
+        f"reviewed-by:{gh_user()} type:pr",   # reviews are NOT covered by involves
+        f"review-requested:{gh_user()} type:pr",
+        f"commenter:{gh_user()}",
+        f"mentions:{gh_user()}",
     ]
     seen = {}
     for qual in qualifiers:
@@ -327,7 +344,7 @@ def fetch_item(owner, repo, number):
 
 # --------------------------------------------------------------- commits ---
 def fetch_commits(since):
-    q = f"author:{USER} author-date:>={since} {EXCLUDE}"
+    q = f"author:{gh_user()} author-date:>={since} {exclude_qualifier()}"
     out, page = {}, 1
     while page <= 10:
         d = gh_json(["api", "-X", "GET", "search/commits",
@@ -398,17 +415,17 @@ def render(node, owner, repo, source="involved"):
     author = (node.get("author") or {}).get("login", "ghost")
 
     mine_comments = [c for c in (node.get("comments") or {}).get("nodes", [])
-                     if (c.get("author") or {}).get("login") == USER]
+                     if (c.get("author") or {}).get("login") == gh_user()]
     mine_reviews = [r for r in (node.get("reviews") or {}).get("nodes", [])
-                    if (r.get("author") or {}).get("login") == USER]
+                    if (r.get("author") or {}).get("login") == gh_user()]
     mine_threads = []
     for t in (node.get("reviewThreads") or {}).get("nodes", []):
-        if any((c.get("author") or {}).get("login") == USER
+        if any((c.get("author") or {}).get("login") == gh_user()
                for c in t["comments"]["nodes"]):
             mine_threads.append(t)
 
     role = []
-    if author == USER:
+    if author == gh_user():
         role.append("author")
     if mine_reviews:
         role.append("reviewer")
@@ -497,7 +514,7 @@ def render(node, owner, repo, source="involved"):
             A("")
             for c in t["comments"]["nodes"]:
                 who = (c.get("author") or {}).get("login", "ghost")
-                mark = " **(me)**" if who == USER else ""
+                mark = " **(me)**" if who == gh_user() else ""
                 A(f"- **@{who}**{mark} — {c.get('createdAt')}")
                 A("")
                 A(fmt_body(c.get("body"), "  > "))
@@ -530,7 +547,7 @@ def render(node, owner, repo, source="involved"):
         A("_No comments._")
     for c in everyone:
         who = (c.get("author") or {}).get("login", "ghost")
-        mark = " **(me)**" if who == USER else ""
+        mark = " **(me)**" if who == gh_user() else ""
         A(f"**@{who}**{mark} — {c.get('createdAt')}")
         A("")
         A(fmt_body(c.get("body"), "> "))
@@ -672,7 +689,7 @@ def main():
             f"**Search Tags/Keywords:** #{owner} #{name} #commits #oss "
             + " ".join("#" + c["sha"][:8] for c in cs[:20]),
             "",
-            f"**GitHub Context:** {repo} · {len(cs)} commits authored by @{USER}",
+            f"**GitHub Context:** {repo} · {len(cs)} commits authored by @{gh_user()}",
             "",
             "---",
             "",
