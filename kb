@@ -18,6 +18,7 @@
 #   ./kb harvest                incremental harvest from every source
 #   ./kb map                    rebuild the topic map
 #   ./kb digest                 rebuild the per-topic digests
+#   ./kb coverage [next|show|done|refresh]   what is left to learn, and what is done
 #   ./kb token                  store a GitHub token for the scheduled job (input hidden)
 #   ./kb doctor                 is the archive reachable, and when did it last sync
 #
@@ -66,6 +67,19 @@ case "$verb" in
     ;;
   digest)
     exec "$ROOT/topic-digest.py" "$@"
+    ;;
+  coverage)
+    # Read-only verbs stay read-only; the two that change something get --apply
+    # added for them, for the same reason `file` does. A program calling
+    # `coverage done <x>` means it, and a silent dry run would report success
+    # having moved nothing.
+    sub=${1:-list}
+    case "$sub" in
+      done|refresh)
+        exec "$ROOT/coverage-queue.py" "$@" --apply ;;
+      *)
+        exec "$ROOT/coverage-queue.py" "$@" ;;
+    esac
     ;;
   token)
     # Exists because "put a secret in a file at this path with these permissions"
@@ -151,6 +165,6 @@ case "$verb" in
     usage
     ;;
   *)
-    die "unknown verb: $verb (try: file index harvest map digest token doctor)"
+    die "unknown verb: $verb (try: file index harvest map digest coverage token doctor)"
     ;;
 esac

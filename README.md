@@ -171,6 +171,40 @@ To add a technology, add its TOC to `YARDSTICKS` in the script. Keep patterns
 narrow — `Filters` as a bare word scored every note mentioning a Java stream
 filter; what makes it a Log4j filter is the class names.
 
+### What to learn next, and what is done
+
+`coverage-gap.py` measures; it does not plan. `coverage-queue.py` turns that
+measurement into a queue you can work through without an assistant.
+
+```bash
+coverage-queue.py                        # what is left, least-known first
+coverage-queue.py next                   # the one to do next, and why that one
+coverage-queue.py show log4j-markers     # the note
+coverage-queue.py done log4j-markers --apply
+coverage-queue.py refresh --apply        # notes for areas newly measured as gaps
+```
+
+Two folders under `Reference/coverage/`, and one rule:
+
+| folder      | meaning                                       |
+|-------------|-----------------------------------------------|
+| `to-cover/` | one note per documented area not yet learned  |
+| `covered/`  | you moved it here when you had done it        |
+
+**The move is the record.** Nothing sets a flag in a database, because a
+database is a thing to keep in sync and a folder is a thing you can see. `done`
+performs the move and rewrites the frontmatter to match; a plain `mv` is equally
+valid and `coverage-queue.py index --apply` will agree with either.
+
+Each note carries the doc link, a **workout** that runs against real code rather
+than a tutorial, and the checks that say it is done. The list is driven by the
+**manual**, never by whatever arrived this week: a pull request can point at an
+area, it cannot add one. That is what keeps a curriculum stable while a review
+queue churns.
+
+Also reachable as `./kb coverage …`, so `oss memory coverage next` works from
+anywhere once this repo is registered as an extension.
+
 ### What to pick up next
 
 ```bash

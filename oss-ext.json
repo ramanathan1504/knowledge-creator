@@ -1,7 +1,7 @@
 {
   "name": "devon",
   "kind": "memory",
-  "description": "Topic-first archive indexed by DEVONthink \u2014 file, index, retrieve",
+  "description": "Topic-first archive indexed by DEVONthink — file, index, retrieve, and the coverage queue",
   "exec": "./kb",
   "verbs": {
     "file": "file",
@@ -9,7 +9,8 @@
     "harvest": "harvest",
     "map": "map",
     "digest": "digest",
-    "doctor": "doctor"
+    "doctor": "doctor",
+    "coverage": "coverage"
   },
   "axes": [
     "topic",
